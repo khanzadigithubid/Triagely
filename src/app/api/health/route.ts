@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/infrastructure/config/env";
 import { getStore, storeBackend } from "@/infrastructure/storage/store";
+import { emailMode } from "@/infrastructure/email/sender";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,6 +28,9 @@ export async function GET(): Promise<NextResponse> {
       status: healthy ? "ok" : "degraded",
       engine: env.LLM_API_KEY ? "hybrid (heuristic + llm)" : "heuristic",
       persistence: storeBackend(),
+      auth: env.AUTH_SECRET ? "configured" : "dev-secret",
+      email: emailMode(),
+      inboundWebhook: env.INBOUND_WEBHOOK_SECRET ? "secured" : "open",
       checks,
       timestamp: new Date().toISOString(),
     },

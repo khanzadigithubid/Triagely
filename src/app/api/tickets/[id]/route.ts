@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { PRIORITIES } from "@/domain/ticket/schemas";
 import { getTicketById } from "@/application/tickets/queries";
+import { getSession } from "@/infrastructure/auth/session";
 import {
   TicketActionError,
   reassignTicket,
@@ -38,6 +39,11 @@ export async function PATCH(
 ): Promise<NextResponse> {
   const { id } = await params;
 
+  const user = await getSession();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
   let raw: unknown;
   try {
     raw = await request.json();
@@ -55,15 +61,16 @@ export async function PATCH(
 
   try {
     const data = parsed.data;
+    const actor = user.name;
     const ticket = await (data.action === "resolve"
-      ? resolveTicket(id)
+      ? resolveTicket(id, actor)
       : data.action === "reopen"
-        ? reopenTicket(id)
+        ? reopenTicket(id, actor)
         : data.action === "reassign"
-          ? reassignTicket(id, data.agentId)
+          ? reassignTicket(id, data.agentId, actor)
           : data.action === "priority"
-            ? setPriority(id, data.priority)
-            : regenerateDraft(id));
+            ? setPriority(id, data.priority, actor)
+            : regenerateDraft(id, actor));
 
     return NextResponse.json({ ticket });
   } catch (error) {

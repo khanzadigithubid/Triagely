@@ -83,6 +83,7 @@ export function SimulateForm() {
         }),
       });
       const data = await res.json();
+      if (res.status === 401) throw new Error("Sign in required — open /login to run triage");
       if (!res.ok) throw new Error(data.error ?? "Ingest failed");
 
       const detail = await fetch(`/api/tickets/${data.ticketId}`).then((r) => r.json());

@@ -4,6 +4,7 @@ import { runTriage } from "@/application/triage/run-triage";
 import { appendAudit } from "@/application/shared/audit";
 import { getStore, mutateStore } from "@/infrastructure/storage/store";
 import { getTicketById, type TicketView } from "@/application/tickets/queries";
+import { sendEmail } from "@/infrastructure/email/sender";
 
 /**
  * Ticket mutations. Every write goes through `mutateStore` and leaves an audit
@@ -41,7 +42,7 @@ export async function sendReply(id: string, body: string, actor = "Agent"): Prom
   const trimmed = body.trim();
   if (!trimmed) throw new TicketActionError("Reply body is empty", "empty_reply");
 
-  const ticketId = await mutateStore((store) => {
+  const planned = await mutateStore((store) => {
     const ticket = requireTicket(store, id);
     const at = nowIso();
     ticket.thread.push({
@@ -58,10 +59,30 @@ export async function sendReply(id: string, body: string, actor = "Agent"): Prom
       action: "replied",
       detail: `${trimmed.slice(0, 80)}${trimmed.length > 80 ? "…" : ""}`,
     });
-    return ticket.id;
+    return { ticketId: ticket.id, to: ticket.fromEmail, toName: ticket.fromName, subject: ticket.subject };
   });
 
-  return (await getTicketById(ticketId))!;
+  // Deliver the reply by email. Best-effort: a delivery failure is recorded but
+  // never rolls back the reply that the agent already sent.
+  const delivery = await sendEmail({
+    to: planned.to,
+    toName: planned.toName,
+    subject: `Re: ${planned.subject}`,
+    body: trimmed,
+  });
+
+  await mutateStore((store) => {
+    appendAudit(store, {
+      ticketId: planned.ticketId,
+      actor: "triagely",
+      action: delivery.delivered ? "email_sent" : delivery.mode === "dry-run" ? "email_dry_run" : "email_failed",
+      detail: delivery.delivered
+        ? `${delivery.mode} → ${planned.to}`
+        : delivery.error ?? `${delivery.mode} → ${planned.to}`,
+    });
+  });
+
+  return (await getTicketById(planned.ticketId))!;
 }
 
 export async function resolveTicket(id: string, actor = "Agent"): Promise<TicketView> {

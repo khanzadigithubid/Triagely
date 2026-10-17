@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { BarChart3, Inbox, LayoutDashboard, Sparkles } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
+import { BarChart3, Inbox, LayoutDashboard, Loader2, LogIn, LogOut, Sparkles } from "lucide-react";
+import type { AuthUser } from "@/infrastructure/auth/types";
 import { cn } from "@/lib/styles";
 
 const LINKS = [
@@ -12,8 +14,21 @@ const LINKS = [
   { href: "/simulate", label: "Simulate", icon: Sparkles },
 ];
 
-export function Nav({ engine }: { engine: string }) {
+export function Nav({ engine, user }: { engine: string; user: AuthUser | null }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  async function signOut() {
+    setBusy(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.push("/login");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-line/80 bg-canvas/80 backdrop-blur-md">
@@ -51,11 +66,38 @@ export function Nav({ engine }: { engine: string }) {
           })}
         </nav>
 
-        <div className="hidden items-center gap-2 md:flex">
-          <span className="pill bg-emerald-500/10 text-emerald-300">
+        <div className="flex items-center gap-2">
+          <span className="pill hidden bg-emerald-500/10 text-emerald-300 lg:inline-flex">
             <span className="animate-pulse-dot size-1.5 rounded-full bg-emerald-400" aria-hidden />
             engine · {engine}
           </span>
+
+          {user ? (
+            <div className="flex items-center gap-2">
+              <span className="hidden text-xs text-muted sm:inline">{user.name}</span>
+              <button
+                type="button"
+                onClick={signOut}
+                disabled={busy}
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-white/5 hover:text-ink disabled:opacity-50"
+              >
+                {busy ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <LogOut className="size-3.5" aria-hidden />
+                )}
+                <span className="hidden sm:inline">Sign out</span>
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="flex items-center gap-1.5 rounded-lg bg-white/8 px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-white/12"
+            >
+              <LogIn className="size-3.5" aria-hidden />
+              <span className="hidden sm:inline">Sign in</span>
+            </Link>
+          )}
         </div>
       </div>
     </header>

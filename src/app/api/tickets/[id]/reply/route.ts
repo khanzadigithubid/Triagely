@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { sendReply, TicketActionError } from "@/application/tickets/actions";
+import { getSession } from "@/infrastructure/auth/session";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,6 +13,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   const { id } = await params;
+
+  const user = await getSession();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
 
   let raw: unknown;
   try {
@@ -26,7 +32,7 @@ export async function POST(
   }
 
   try {
-    const ticket = await sendReply(id, parsed.data.body);
+    const ticket = await sendReply(id, parsed.data.body, user.name);
     return NextResponse.json({ ticket }, { status: 201 });
   } catch (error) {
     if (error instanceof TicketActionError) {

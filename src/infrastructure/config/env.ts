@@ -31,6 +31,22 @@ const schema = z.object({
   LLM_TIMEOUT_MS: int(30_000).pipe(z.number().min(1000).max(300_000)),
   LLM_MAX_RETRIES: int(2).pipe(z.number().min(0).max(10)),
   LLM_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
+
+  /** Secret used to sign session cookies. Required in production. */
+  AUTH_SECRET: z.string().optional(),
+
+  /** Bootstrap admin, seeded on first login when no users exist. */
+  ADMIN_EMAIL: z.string().email().optional(),
+  ADMIN_PASSWORD: z.string().optional(),
+  ADMIN_NAME: z.string().default("Triagely Admin"),
+
+  /** Outbound email. Without a key, email runs in dry-run (logged, not sent). */
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default("Triagely <onboarding@resend.dev>"),
+  EMAIL_REPLY_TO: z.string().email().optional(),
+
+  /** Shared secret required on inbound email webhooks. */
+  INBOUND_WEBHOOK_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof schema>;

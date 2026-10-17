@@ -7,7 +7,9 @@ and with a full audit trail.
 
 No external services required: the deterministic engine and a local JSON store
 work out of the box. Point `DATABASE_URL` at Postgres for durable storage, and
-set `LLM_API_KEY` to add optional model-based refinement.
+set `LLM_API_KEY` to add optional model-based refinement. Operators sign in to
+act on tickets; replies can be delivered by email via `RESEND_API_KEY`, and new
+tickets can arrive from a provider's inbound email webhook.
 
 ## What it does
 
@@ -29,6 +31,7 @@ set `LLM_API_KEY` to add optional model-based refinement.
 | `/inbox/[id]` | Conversation, triage breakdown, SLA meter, assignment/priority controls, suggested reply, audit trail. |
 | `/analytics` | Automation coverage, SLA compliance, category/sentiment mix, volume, per-agent performance. |
 | `/simulate` | Compose a fake inbound email and run it through the live ingest pipeline. |
+| `/login` | Operator sign-in. Reading data is public; mutations require a session. |
 
 ## Getting started
 
@@ -69,8 +72,36 @@ Copy `.env.example` to `.env.local`. Everything is optional.
 | `LLM_MODEL` | `gpt-4o-mini` | |
 | `LLM_CONFIDENCE_THRESHOLD` | `0.85` | Skip the LLM when the heuristic is already confident. |
 | `SUPPORT_ORG` / `SUPPORT_SIGNATURE` | `Triagely` | Branding used in replies. |
+| `AUTH_SECRET` | *(dev default)* | Signs session cookies. Set in production. |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@triagely.app` / `triagely-admin` | Bootstrap admin seeded on first sign-in. |
+| `RESEND_API_KEY` | *(empty)* | Delivers replies by email via Resend. Empty = dry-run. |
+| `EMAIL_FROM` / `EMAIL_REPLY_TO` | `Triagely <onboarding@resend.dev>` | Sender identity for outbound email. |
+| `INBOUND_WEBHOOK_SECRET` | *(empty)* | Shared secret required on inbound email webhooks. |
 
 With no key, the engine is `heuristic` and every feature still works offline.
+
+## Authentication
+
+Accounts live in `triagely_users` (Postgres) or `data/users.json` (file backend).
+Passwords are stored as scrypt hashes; sessions are stateless HMAC-signed
+httpOnly cookies (`AUTH_SECRET`). On the first sign-in an admin is seeded from
+`ADMIN_EMAIL` / `ADMIN_PASSWORD` (or the documented default).
+
+**Reading** tickets, analytics and the health check is public. **Mutations** —
+ingesting, replying, resolving, reassigning, changing priority — require a
+session and return `401` without one. The UI prompts sign-in and the audit trail
+records the operator's name.
+
+## Email
+
+- **Outbound.** Sending a reply records it on the ticket, then delivers it by
+  email (subject `Re: …`). With `RESEND_API_KEY` the free Resend tier is used;
+  with no key it runs in **dry-run** mode — logged and audited, never sent.
+  Delivery is best-effort: a failure is audited but does not undo the reply.
+- **Inbound.** `POST /api/inbound/email` accepts a provider webhook (Resend
+  `email.received`, Mailgun-style form fields, or a generic JSON body), normalises
+  it and runs the full ingest pipeline. Protect it with `INBOUND_WEBHOOK_SECRET`
+  (sent as `x-triagely-signature` or `Authorization: Bearer <secret>`).
 
 ## Persistence
 
@@ -93,6 +124,11 @@ project's environment variables (Neon and Vercel Postgres both have free tiers):
 ```bash
 # create a database (example: Neon), then copy the pooled connection string
 vercel env add DATABASE_URL production
+vercel env add AUTH_SECRET production           # signs session cookies
+vercel env add ADMIN_EMAIL production           # bootstrap admin (optional)
+vercel env add ADMIN_PASSWORD production        # bootstrap admin password (optional)
+vercel env add RESEND_API_KEY production        # outbound email (optional; dry-run without it)
+vercel env add INBOUND_WEBHOOK_SECRET production # inbound webhook auth (optional)
 ```
 
 Without `DATABASE_URL`, Vercel's read-only filesystem makes the store degrade to
@@ -104,11 +140,15 @@ instances. With it, tickets, replies and the audit trail persist.
 | Method | Route | Description |
 | --- | --- | --- |
 | `GET` | `/api/tickets` | List tickets. Filters: `status`, `category`, `priority`, `q`. |
-| `POST` | `/api/tickets` | Ingest + triage a raw inbound message (webhook style). |
+| `POST` | `/api/tickets` | Ingest + triage a raw inbound message (webhook style). 🔒 |
 | `GET` | `/api/tickets/:id` | Fetch a single enriched ticket. |
-| `PATCH` | `/api/tickets/:id` | `resolve` · `reopen` · `reassign` · `priority` · `regenerate_draft`. |
-| `POST` | `/api/tickets/:id/reply` | Send a reply, appending to the thread. |
-| `GET` | `/api/health` | Store liveness and active engine mode. |
+| `PATCH` | `/api/tickets/:id` | `resolve` · `reopen` · `reassign` · `priority` · `regenerate_draft`. 🔒 |
+| `POST` | `/api/tickets/:id/reply` | Send a reply (email delivery), appending to the thread. 🔒 |
+| `POST` | `/api/inbound/email` | Provider inbound-email webhook. Protected by `INBOUND_WEBHOOK_SECRET`. |
+| `POST` | `/api/auth/login` · `POST /api/auth/logout` · `GET /api/auth/me` | Session endpoints. |
+| `GET` | `/api/health` | Store liveness, engine mode, auth/email status. |
+
+🔒 requires a signed-in operator session (`triagely_session` cookie).
 
 Example:
 
@@ -129,8 +169,9 @@ Domain-driven, dependency-injected, side-effect free where it matters:
 src/
   domain/          pure logic, no I/O — schemas, classifier, sentiment,
                    urgency, priority, SLA policy, draft templates   (unit-tested)
-  application/     use cases — ingest, run-triage, queries, actions
-  infrastructure/  store (Postgres or file), env, logger, LLM client
+  application/     use cases — ingest, run-triage, queries, actions, auth
+  infrastructure/  store (Postgres or file), auth (users, password, sessions),
+                   email sender, env, logger, LLM client
   app/             routes and API handlers
   components/      UI
 ```

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CATEGORIES, STATUSES } from "@/domain/ticket/schemas";
 import { listTickets } from "@/application/tickets/queries";
 import { ingestTicket } from "@/application/ingest/ingest-ticket";
+import { getSession } from "@/infrastructure/auth/session";
 import { log } from "@/infrastructure/observability/logger";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
 /** Webhook-style ingest endpoint: POST a raw inbound message to auto-triage it. */
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  if (!(await getSession())) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
   let raw: unknown;
   try {
     raw = await request.json();

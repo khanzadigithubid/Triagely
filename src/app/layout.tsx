@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Nav } from "@/components/layout/nav";
 import { getEnv } from "@/infrastructure/config/env";
+import { getSession } from "@/infrastructure/auth/session";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -26,8 +27,9 @@ export const metadata: Metadata = {
   applicationName: "Triagely",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
   const engine = getEnv().LLM_API_KEY ? "hybrid" : "heuristic";
+  const user = await getSession();
 
   return (
     <html
@@ -35,7 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} antialiased`}
     >
       <body className="min-h-screen">
-        <Nav engine={engine} />
+        <Nav engine={engine} user={user} />
         <main className="shell py-6 md:py-8">{children}</main>
         <footer className="shell pb-8 pt-2">
           <p className="border-t border-line pt-4 font-mono text-[10px] uppercase tracking-wider text-faint">

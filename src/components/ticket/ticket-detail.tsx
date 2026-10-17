@@ -56,6 +56,7 @@ export function TicketDetail({
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
+    if (res.status === 401) throw new Error("Sign in required — open /login to make changes");
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error ?? "Request failed");
@@ -70,6 +71,7 @@ export function TicketDetail({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ body: draft }),
       });
+      if (res.status === 401) throw new Error("Sign in required — open /login to send replies");
       if (!res.ok) throw new Error("Failed to send reply");
       setNotice("Reply sent — ticket moved to awaiting customer.");
       router.refresh();

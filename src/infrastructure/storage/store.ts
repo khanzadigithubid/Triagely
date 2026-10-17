@@ -9,14 +9,19 @@ import { log } from "@/infrastructure/observability/logger";
  *
  * The whole dataset (agents, tickets, audit trail, counters) is small enough
  * to hold in memory and persist as a single JSON document. Reads are cached;
- * every mutation rewrites the file atomically-ish (write temp, rename) so a
- * crash mid-write cannot leave a half-written store behind.
+ * every mutation rewrites the file (temp then target).
+ *
+ * The directory is pinned under the project so bundlers can trace it statically.
+ * On read-only filesystems (Vercel/Lambda serverless runtimes), the first write
+ * fails and the store transparently degrades to in-memory — seeding fresh data
+ * per instance instead of throwing a 500.
  */
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "store.json");
 
 let cache: Store | null = null;
+let persistenceDisabled = false;
 
 function ensureDataDir(): void {
   if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
@@ -31,7 +36,6 @@ export function getStore(): Store {
   if (cache) return cache;
 
   if (!existsSync(STORE_PATH)) {
-    ensureDataDir();
     const seeded = buildSeedStore();
     writeAtomic(seeded);
     cache = seeded;
@@ -44,10 +48,21 @@ export function getStore(): Store {
 }
 
 function writeAtomic(store: Store): void {
-  ensureDataDir();
-  const tmp = `${STORE_PATH}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify(store, null, 2), "utf8");
-  writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
+  if (persistenceDisabled) return;
+  try {
+    ensureDataDir();
+    const payload = JSON.stringify(store, null, 2);
+    const tmp = `${STORE_PATH}.${process.pid}.tmp`;
+    writeFileSync(tmp, payload, "utf8");
+    writeFileSync(STORE_PATH, payload, "utf8");
+  } catch (error) {
+    persistenceDisabled = true;
+    log.warn(
+      `Persistent store disabled (filesystem not writable at ${DATA_DIR}); running in memory: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 }
 
 export function saveStore(store: Store): Store {

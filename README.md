@@ -69,6 +69,15 @@ Copy `.env.example` to `.env.local`. Everything is optional.
 
 With no key, the engine is `heuristic` and every feature still works offline.
 
+## Deployment
+
+The app deploys to Vercel with no extra configuration. Vercel's filesystem is
+read-only, so the first store write fails and the app transparently degrades to
+in-memory data — it seeds fresh per instance and never 500s on a read-only FS.
+Because that storage is ephemeral, mutations do not survive a redeploy or persist
+across serverless instances. For durable storage, swap
+`src/infrastructure/storage/store.ts` for a database/Redis-backed implementation.
+
 ## HTTP API
 
 | Method | Route | Description |

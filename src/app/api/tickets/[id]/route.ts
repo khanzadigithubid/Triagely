@@ -27,7 +27,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   const { id } = await params;
-  const ticket = getTicketById(id);
+  const ticket = await getTicketById(id);
   if (!ticket) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
   return NextResponse.json({ ticket });
 }
@@ -55,16 +55,15 @@ export async function PATCH(
 
   try {
     const data = parsed.data;
-    const ticket =
-      data.action === "resolve"
-        ? resolveTicket(id)
-        : data.action === "reopen"
-          ? reopenTicket(id)
-          : data.action === "reassign"
-            ? reassignTicket(id, data.agentId)
-            : data.action === "priority"
-              ? setPriority(id, data.priority)
-              : await regenerateDraft(id);
+    const ticket = await (data.action === "resolve"
+      ? resolveTicket(id)
+      : data.action === "reopen"
+        ? reopenTicket(id)
+        : data.action === "reassign"
+          ? reassignTicket(id, data.agentId)
+          : data.action === "priority"
+            ? setPriority(id, data.priority)
+            : regenerateDraft(id));
 
     return NextResponse.json({ ticket });
   } catch (error) {

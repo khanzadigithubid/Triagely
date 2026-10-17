@@ -12,7 +12,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Next.js 16 (App Router, Turbopack), React 19, TypeScript-strict, Tailwind v4 (`@import "tailwindcss"` in `src/app/globals.css`).
 - Async request APIs only: `params`, `searchParams`, `cookies()`, `headers()` are async; read them with `await`.
-- Data pages read the JSON store directly and must be `export const dynamic = "force-dynamic"` so they render live data, not build-time snapshots.
+- Data pages read the store directly and must be `export const dynamic = "force-dynamic"` so they render live data, not build-time snapshots. Store access is async (`getStore`/`mutateStore`): back it with Postgres when `DATABASE_URL` is set, otherwise a JSON file.
 - Mutations go through API routes under `src/app/api` and the UI refreshes with `router.refresh()`.
-- Layering: `src/domain` (pure logic, no I/O), `src/application` (use cases), `src/infrastructure` (file store, llm client, env, logger), `src/app` + `src/components` (UI). Domain modules must stay side-effect free and dependency-injected so they are unit-testable with vitest.
+- Layering: `src/domain` (pure logic, no I/O), `src/application` (use cases), `src/infrastructure` (store, llm client, env, logger), `src/app` + `src/components` (UI). Domain modules must stay side-effect free and dependency-injected so they are unit-testable with vitest.
 - No API key required: the heuristic triage engine is the default. Linting: `npm run lint`; types: `npm run typecheck`; tests: `npm run test`. Verify all three before finishing.

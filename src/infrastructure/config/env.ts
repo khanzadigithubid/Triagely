@@ -19,6 +19,9 @@ const int = (defaultValue: number) =>
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 
+  /** Postgres connection string. When set, the store persists to the database. */
+  DATABASE_URL: z.string().optional(),
+
   SUPPORT_ORG: z.string().default("Triagely"),
   SUPPORT_SIGNATURE: z.string().default("The {org} Support Team"),
 

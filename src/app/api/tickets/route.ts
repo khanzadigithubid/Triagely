@@ -25,7 +25,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const priority = params.get("priority");
   const q = params.get("q")?.toLowerCase();
 
-  let tickets = listTickets();
+  let tickets = await listTickets();
 
   if (status && (STATUSES as readonly string[]).includes(status)) {
     tickets = tickets.filter((t) => t.status === status);

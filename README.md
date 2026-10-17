@@ -5,8 +5,9 @@ inbound message is **classified, scored, prioritized, routed, given an SLA
 deadline, and answered with a draft reply** — automatically, deterministically,
 and with a full audit trail.
 
-No database and no API key required. The heuristic engine is the default;
-an optional OpenAI-compatible LLM refines the result when one is configured.
+No external services required: the deterministic engine and a local JSON store
+work out of the box. Point `DATABASE_URL` at Postgres for durable storage, and
+set `LLM_API_KEY` to add optional model-based refinement.
 
 ## What it does
 
@@ -36,8 +37,9 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
-The JSON store at `data/store.json` is seeded with ~18 realistic tickets and 6
-agents on first read, so the app has data immediately.
+The store is seeded with ~18 realistic tickets and 6 agents on first read, so
+the app has data immediately. By default it is a JSON file at `data/store.json`;
+set `DATABASE_URL` to persist to Postgres instead.
 
 ```bash
 npm run reset      # wipe data/store.json and re-seed
@@ -51,7 +53,7 @@ npm run reset      # wipe data/store.json and re-seed
 | `npm run build` / `npm start` | Production build and server. |
 | `npm run lint` | ESLint, zero warnings allowed. |
 | `npm run typecheck` | `tsc --noEmit`. |
-| `npm run test` | Vitest unit tests (domain only). |
+| `npm run test` | Vitest: domain units + a Postgres store integration test. |
 | `npm run reset` | Re-seed the JSON store. |
 | `npm run verify` | typecheck + lint + test + build. |
 
@@ -61,6 +63,7 @@ Copy `.env.example` to `.env.local`. Everything is optional.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
+| `DATABASE_URL` | *(empty)* | Postgres connection string. When set, the store persists to the database; otherwise a JSON file. |
 | `LLM_API_KEY` | *(empty)* | Enables the LLM refinement pass (engine becomes `hybrid`). |
 | `LLM_BASE_URL` | `https://api.openai.com/v1` | Any OpenAI-compatible endpoint. |
 | `LLM_MODEL` | `gpt-4o-mini` | |
@@ -69,14 +72,32 @@ Copy `.env.example` to `.env.local`. Everything is optional.
 
 With no key, the engine is `heuristic` and every feature still works offline.
 
+## Persistence
+
+The store keeps the whole aggregate (agents, tickets, audit trail, counters) in
+a single `triagely_store` row — `id`, `data jsonb`, `updated_at`. It picks a
+backend at runtime:
+
+- **Postgres** when `DATABASE_URL` is set — durable across redeploys and shared
+  across serverless instances. Mutations run inside a `for update` row lock so
+  concurrent writers serialise, and the schema is created automatically.
+- **JSON file** at `data/store.json` otherwise (local development).
+- **In-memory** if that file is not writable and no database is configured, so
+  requests never crash on a read-only FS.
+
 ## Deployment
 
-The app deploys to Vercel with no extra configuration. Vercel's filesystem is
-read-only, so the first store write fails and the app transparently degrades to
-in-memory data — it seeds fresh per instance and never 500s on a read-only FS.
-Because that storage is ephemeral, mutations do not survive a redeploy or persist
-across serverless instances. For durable storage, swap
-`src/infrastructure/storage/store.ts` for a database/Redis-backed implementation.
+Deploy to Vercel, then add a Postgres database and set `DATABASE_URL` in the
+project's environment variables (Neon and Vercel Postgres both have free tiers):
+
+```bash
+# create a database (example: Neon), then copy the pooled connection string
+vercel env add DATABASE_URL production
+```
+
+Without `DATABASE_URL`, Vercel's read-only filesystem makes the store degrade to
+in-memory: the app works but data resets on every deploy and is not shared across
+instances. With it, tickets, replies and the audit trail persist.
 
 ## HTTP API
 
@@ -109,7 +130,7 @@ src/
   domain/          pure logic, no I/O — schemas, classifier, sentiment,
                    urgency, priority, SLA policy, draft templates   (unit-tested)
   application/     use cases — ingest, run-triage, queries, actions
-  infrastructure/  file store, env, logger, LLM client
+  infrastructure/  store (Postgres or file), env, logger, LLM client
   app/             routes and API handlers
   components/      UI
 ```
@@ -123,4 +144,4 @@ src/
 ## Tech
 
 Next.js 16 (App Router, Turbopack) · React 19 · TypeScript (strict) ·
-Tailwind CSS v4 · Zod · Vitest.
+Tailwind CSS v4 · Zod · postgres.js · Vitest.

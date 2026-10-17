@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Inbox" };
 
-export default function InboxPage() {
-  const tickets = listTickets();
+export default async function InboxPage() {
+  const tickets = await listTickets();
   return <InboxView tickets={tickets} />;
 }

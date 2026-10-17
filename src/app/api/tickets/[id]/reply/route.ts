@@ -26,7 +26,7 @@ export async function POST(
   }
 
   try {
-    const ticket = sendReply(id, parsed.data.body);
+    const ticket = await sendReply(id, parsed.data.body);
     return NextResponse.json({ ticket }, { status: 201 });
   } catch (error) {
     if (error instanceof TicketActionError) {

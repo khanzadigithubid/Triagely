@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/infrastructure/config/env";
-import { getStore } from "@/infrastructure/storage/store";
+import { getStore, storeBackend } from "@/infrastructure/storage/store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -11,8 +11,8 @@ export async function GET(): Promise<NextResponse> {
   const checks: Record<string, { ok: boolean; detail?: string }> = {};
 
   try {
-    const store = getStore();
-    checks.store = { ok: true, detail: `${store.tickets.length} tickets` };
+    const store = await getStore();
+    checks.store = { ok: true, detail: `${store.tickets.length} tickets via ${storeBackend()}` };
   } catch (error) {
     checks.store = {
       ok: false,
@@ -26,6 +26,7 @@ export async function GET(): Promise<NextResponse> {
     {
       status: healthy ? "ok" : "degraded",
       engine: env.LLM_API_KEY ? "hybrid (heuristic + llm)" : "heuristic",
+      persistence: storeBackend(),
       checks,
       timestamp: new Date().toISOString(),
     },

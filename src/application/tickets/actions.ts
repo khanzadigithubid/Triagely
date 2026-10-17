@@ -1,4 +1,4 @@
-import type { Priority } from "@/domain/ticket/schemas";
+import type { Priority, Store } from "@/domain/ticket/schemas";
 import { slaDeadline } from "@/domain/sla/policy";
 import { runTriage } from "@/application/triage/run-triage";
 import { appendAudit } from "@/application/shared/audit";
@@ -8,7 +8,7 @@ import { getTicketById, type TicketView } from "@/application/tickets/queries";
 /**
  * Ticket mutations. Every write goes through `mutateStore` and leaves an audit
  * trail entry, so the UI can show exactly what the automation did versus what a
- * human did.
+ * human did. Mutations are async because the store may be backed by Postgres.
  */
 
 export class TicketActionError extends Error {
@@ -31,17 +31,17 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function requireTicket(store: ReturnType<typeof getStore>, id: string) {
+function requireTicket(store: Store, id: string) {
   const ticket = store.tickets.find((t) => t.id === id);
   if (!ticket) throw new TicketActionError(`Ticket ${id} not found`, "not_found");
   return ticket;
 }
 
-export function sendReply(id: string, body: string, actor = "Agent"): TicketView {
+export async function sendReply(id: string, body: string, actor = "Agent"): Promise<TicketView> {
   const trimmed = body.trim();
   if (!trimmed) throw new TicketActionError("Reply body is empty", "empty_reply");
 
-  const ticketId = mutateStore((store) => {
+  const ticketId = await mutateStore((store) => {
     const ticket = requireTicket(store, id);
     const at = nowIso();
     ticket.thread.push({
@@ -61,33 +61,37 @@ export function sendReply(id: string, body: string, actor = "Agent"): TicketView
     return ticket.id;
   });
 
-  return getTicketById(ticketId)!;
+  return (await getTicketById(ticketId))!;
 }
 
-export function resolveTicket(id: string, actor = "Agent"): TicketView {
-  const ticketId = mutateStore((store) => {
+export async function resolveTicket(id: string, actor = "Agent"): Promise<TicketView> {
+  const ticketId = await mutateStore((store) => {
     const ticket = requireTicket(store, id);
     ticket.status = "resolved";
     ticket.updatedAt = nowIso();
     appendAudit(store, { ticketId: ticket.id, actor, action: "resolved" });
     return ticket.id;
   });
-  return getTicketById(ticketId)!;
+  return (await getTicketById(ticketId))!;
 }
 
-export function reopenTicket(id: string, actor = "Agent"): TicketView {
-  const ticketId = mutateStore((store) => {
+export async function reopenTicket(id: string, actor = "Agent"): Promise<TicketView> {
+  const ticketId = await mutateStore((store) => {
     const ticket = requireTicket(store, id);
     ticket.status = "open";
     ticket.updatedAt = nowIso();
     appendAudit(store, { ticketId: ticket.id, actor, action: "reopened" });
     return ticket.id;
   });
-  return getTicketById(ticketId)!;
+  return (await getTicketById(ticketId))!;
 }
 
-export function reassignTicket(id: string, agentId: string | null, actor = "Agent"): TicketView {
-  const ticketId = mutateStore((store) => {
+export async function reassignTicket(
+  id: string,
+  agentId: string | null,
+  actor = "Agent",
+): Promise<TicketView> {
+  const ticketId = await mutateStore((store) => {
     const ticket = requireTicket(store, id);
     const agent = agentId ? store.agents.find((a) => a.id === agentId) : null;
     ticket.assigneeId = agent ? agent.id : null;
@@ -101,11 +105,11 @@ export function reassignTicket(id: string, agentId: string | null, actor = "Agen
     });
     return ticket.id;
   });
-  return getTicketById(ticketId)!;
+  return (await getTicketById(ticketId))!;
 }
 
-export function setPriority(id: string, priority: Priority, actor = "Agent"): TicketView {
-  const ticketId = mutateStore((store) => {
+export async function setPriority(id: string, priority: Priority, actor = "Agent"): Promise<TicketView> {
+  const ticketId = await mutateStore((store) => {
     const ticket = requireTicket(store, id);
     ticket.classification.priority = priority;
     ticket.classification.priorityScore = PRIORITY_REPRESENTATIVE[priority];
@@ -121,12 +125,12 @@ export function setPriority(id: string, priority: Priority, actor = "Agent"): Ti
     });
     return ticket.id;
   });
-  return getTicketById(ticketId)!;
+  return (await getTicketById(ticketId))!;
 }
 
 /** Re-run triage to refresh the draft reply (e.g. after a manual priority change). */
 export async function regenerateDraft(id: string, actor = "Agent"): Promise<TicketView> {
-  const snapshot = getStore();
+  const snapshot = await getStore();
   const ticket = snapshot.tickets.find((t) => t.id === id);
   if (!ticket) throw new TicketActionError(`Ticket ${id} not found`, "not_found");
 
@@ -136,7 +140,7 @@ export async function regenerateDraft(id: string, actor = "Agent"): Promise<Tick
     { agent, org: snapshot.org },
   );
 
-  const ticketId = mutateStore((store) => {
+  const ticketId = await mutateStore((store) => {
     const draft = requireTicket(store, id);
     draft.draftReply = triaged.draftReply;
     draft.draftReplyEngine = triaged.draftReplyEngine;
@@ -149,15 +153,15 @@ export async function regenerateDraft(id: string, actor = "Agent"): Promise<Tick
     });
     return draft.id;
   });
-  return getTicketById(ticketId)!;
+  return (await getTicketById(ticketId))!;
 }
 
-export function assignNextAgent(id: string, actor = "Agent"): TicketView {
-  const snapshot = getStore();
+export async function assignNextAgent(id: string, actor = "Agent"): Promise<TicketView> {
+  const snapshot = await getStore();
   const ticket = snapshot.tickets.find((t) => t.id === id);
   if (!ticket) throw new TicketActionError(`Ticket ${id} not found`, "not_found");
 
   const currentIndex = snapshot.agents.findIndex((a) => a.id === ticket.assigneeId);
   const next = snapshot.agents[(currentIndex + 1) % snapshot.agents.length];
-  return next ? reassignTicket(id, next.id, actor) : reassignTicket(id, null, actor);
+  return reassignTicket(id, next ? next.id : null, actor);
 }

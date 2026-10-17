@@ -11,8 +11,8 @@ import { log } from "@/infrastructure/observability/logger";
  * Ingest a single inbound message and run the full automation: dedupe, triage,
  * route to an agent, set the SLA deadline and persist an audit trail.
  *
- * The async triage work (which may call an LLM) happens before the synchronous
- * store mutation, so the write is atomic and never interleaves with a network
+ * The async triage work (which may call an LLM) happens before the store
+ * mutation, so the write is atomic and never interleaves with a network
  * round-trip.
  *
  * Idempotent on `messageId`: re-delivering the same message returns the
@@ -29,7 +29,7 @@ export interface IngestResult {
 export async function ingestTicket(input: InboundMessage): Promise<IngestResult> {
   const receivedAt = input.receivedAt ?? new Date().toISOString();
 
-  const snapshot = getStore();
+  const snapshot = await getStore();
   const existing = snapshot.tickets.find((t) => t.messageId === input.messageId);
   if (existing) {
     return { ticketId: existing.id, number: existing.number, duplicate: true, action: "existing" };
@@ -57,7 +57,7 @@ export async function ingestTicket(input: InboundMessage): Promise<IngestResult>
 
   const deadline = slaDeadline(Date.parse(receivedAt), triaged.classification.priority);
 
-  // 3. Persist synchronously.
+  // 3. Persist atomically.
   return mutateStore((store) => {
     const dupe = store.tickets.find((t) => t.messageId === input.messageId);
     if (dupe) {

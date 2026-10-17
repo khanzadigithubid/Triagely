@@ -22,8 +22,8 @@ const SENTIMENT_BAR: Record<string, string> = {
   positive: "bg-emerald-500",
 };
 
-export default function AnalyticsPage() {
-  const analytics = computeAnalytics();
+export default async function AnalyticsPage() {
+  const analytics = await computeAnalytics();
   const { totals } = analytics;
   const resolutionRate = totals.all > 0 ? (totals.resolved / totals.all) * 100 : 0;
   const today = new Date().toISOString().slice(0, 10);

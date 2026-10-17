@@ -14,3 +14,16 @@ if (existsSync(storePath)) {
 if (existsSync(dataDir) && readdirSync(dataDir).length === 0) {
   rmSync(dataDir);
 }
+
+if (process.env.DATABASE_URL) {
+  const { default: postgres } = await import('postgres');
+  const sql = postgres(process.env.DATABASE_URL, { max: 1, prepare: false });
+  try {
+    await sql`delete from triagely_store where id = 'default'`;
+    console.log('Cleared Postgres store row (triagely_store#default)');
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+} else {
+  console.log('DATABASE_URL not set; skipped Postgres reset.');
+}

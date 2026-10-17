@@ -15,6 +15,10 @@ import { getStore } from "@/infrastructure/storage/store";
 /**
  * Read-side application queries. Pure transforms over the store plus a live
  * SLA evaluation against the current time.
+ *
+ * The store can live in Postgres, so the entry points are async. Pure helpers
+ * that already hold a `Store` are also exported so one request can render from
+ * a single load.
  */
 
 export interface TicketView extends Omit<Ticket, "sla"> {
@@ -40,12 +44,11 @@ export function enrichTicket(ticket: Ticket, agents: Agent[], nowMs: number): Ti
   };
 }
 
-export function listAgents(store: Store = getStore()): Agent[] {
+export function listAgents(store: Store): Agent[] {
   return store.agents;
 }
 
-export function listTickets(nowMs: number = Date.now()): TicketView[] {
-  const store = getStore();
+export function listTicketViews(store: Store, nowMs: number): TicketView[] {
   return store.tickets
     .map((ticket) => enrichTicket(ticket, store.agents, nowMs))
     .sort((a, b) => {
@@ -56,16 +59,43 @@ export function listTickets(nowMs: number = Date.now()): TicketView[] {
     });
 }
 
-export function getTicketById(id: string, nowMs: number = Date.now()): TicketView | null {
-  const store = getStore();
+export function findTicketView(store: Store, id: string, nowMs: number): TicketView | null {
   const ticket = store.tickets.find((t) => t.id === id);
   return ticket ? enrichTicket(ticket, store.agents, nowMs) : null;
 }
 
-export function getTicketAudit(id: string): AuditEvent[] {
-  return getStore()
-    .audit.filter((event) => event.ticketId === id)
+export function ticketAudit(store: Store, id: string): AuditEvent[] {
+  return store.audit
+    .filter((event) => event.ticketId === id)
     .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+}
+
+/* Async wrappers for callers that do not already hold a store. */
+
+export async function listTickets(nowMs: number = Date.now()): Promise<TicketView[]> {
+  return listTicketViews(await getStore(), nowMs);
+}
+
+export async function getTicketById(id: string, nowMs: number = Date.now()): Promise<TicketView | null> {
+  return findTicketView(await getStore(), id, nowMs);
+}
+
+export async function getTicketAudit(id: string): Promise<AuditEvent[]> {
+  return ticketAudit(await getStore(), id);
+}
+
+export interface TicketDetailData {
+  ticket: TicketView;
+  agents: Agent[];
+  audit: AuditEvent[];
+}
+
+/** Everything the ticket detail page needs, from a single store load. */
+export async function getTicketDetail(id: string, nowMs: number = Date.now()): Promise<TicketDetailData | null> {
+  const store = await getStore();
+  const ticket = findTicketView(store, id, nowMs);
+  if (!ticket) return null;
+  return { ticket, agents: listAgents(store), audit: ticketAudit(store, id) };
 }
 
 export interface Analytics {
@@ -88,8 +118,7 @@ export interface Analytics {
   agents: { agent: Agent; open: number; resolved: number; urgent: number }[];
 }
 
-export function computeAnalytics(nowMs: number = Date.now()): Analytics {
-  const store = getStore();
+export function analyticsFromStore(store: Store, nowMs: number): Analytics {
   const views = store.tickets.map((t) => enrichTicket(t, store.agents, nowMs));
 
   const open = views.filter((v) => v.open);
@@ -164,6 +193,10 @@ export function computeAnalytics(nowMs: number = Date.now()): Analytics {
     volumeByDay,
     agents,
   };
+}
+
+export async function computeAnalytics(nowMs: number = Date.now()): Promise<Analytics> {
+  return analyticsFromStore(await getStore(), nowMs);
 }
 
 function lastNDays(n: number, nowMs: number): string[] {

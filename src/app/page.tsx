@@ -25,9 +25,9 @@ const PRIORITY_HEX: Record<string, string> = {
   low: "#71717a",
 };
 
-export default function OverviewPage() {
-  const analytics = computeAnalytics();
-  const tickets = listTickets();
+export default async function OverviewPage() {
+  const analytics = await computeAnalytics();
+  const tickets = await listTickets();
   const { totals } = analytics;
 
   const needingAttention = tickets

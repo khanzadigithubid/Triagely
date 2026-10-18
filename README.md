@@ -120,8 +120,9 @@ backend) can drive tickets headlessly.
 | `POST` | `/api/v1/tickets/:id/reply` | Send a reply (email delivery), appending to the thread. |
 | `GET` | `/api/v1/analytics` | Aggregated analytics. |
 
-**Keys.** Mint and revoke keys from the admin endpoints (they require a signed-in
-operator session): `GET`/`POST /api/admin/api-keys`, `DELETE /api/admin/api-keys/:id`.
+**Keys.** Mint and revoke keys from the **API keys** console page (`/keys`, visible
+when signed in), or the underlying admin endpoints, which require a signed-in
+operator session: `GET`/`POST /api/admin/api-keys`, `DELETE /api/admin/api-keys/:id`.
 The full secret (`tgk_<prefix>_<secret>`) is returned **once** at creation; only a
 SHA-256 hash is stored, so it can never be recovered. Alternatively, set
 `API_BOOTSTRAP_KEY` to accept a fixed admin key from the environment.

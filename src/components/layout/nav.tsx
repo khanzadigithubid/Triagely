@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { BarChart3, Inbox, LayoutDashboard, Loader2, LogIn, LogOut, Sparkles } from "lucide-react";
+import { BarChart3, Inbox, KeyRound, LayoutDashboard, Loader2, LogIn, LogOut, Sparkles } from "lucide-react";
 import type { AuthUser } from "@/infrastructure/auth/types";
 import { cn } from "@/lib/styles";
 
@@ -13,6 +13,8 @@ const LINKS = [
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/simulate", label: "Simulate", icon: Sparkles },
 ];
+
+const ADMIN_LINKS = [{ href: "/keys", label: "API keys", icon: KeyRound }];
 
 export function Nav({ engine, user }: { engine: string; user: AuthUser | null }) {
   const pathname = usePathname();
@@ -46,7 +48,7 @@ export function Nav({ engine, user }: { engine: string; user: AuthUser | null })
         </div>
 
         <nav className="flex items-center gap-1">
-          {LINKS.map((link) => {
+          {[...LINKS, ...(user ? ADMIN_LINKS : [])].map((link) => {
             const active =
               link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
             const Icon = link.icon;

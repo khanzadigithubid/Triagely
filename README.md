@@ -77,6 +77,7 @@ Copy `.env.example` to `.env.local`. Everything is optional.
 | `RESEND_API_KEY` | *(empty)* | Delivers replies by email via Resend. Empty = dry-run. |
 | `EMAIL_FROM` / `EMAIL_REPLY_TO` | `Triagely <onboarding@resend.dev>` | Sender identity for outbound email. |
 | `INBOUND_WEBHOOK_SECRET` | *(empty)* | Shared secret required on inbound email webhooks. |
+| `API_BOOTSTRAP_KEY` | *(empty)* | Optional admin API key for `/api/v1`, accepted straight from the environment. |
 
 With no key, the engine is `heuristic` and every feature still works offline.
 
@@ -102,6 +103,36 @@ records the operator's name.
   `email.received`, Mailgun-style form fields, or a generic JSON body), normalises
   it and runs the full ingest pipeline. Protect it with `INBOUND_WEBHOOK_SECRET`
   (sent as `x-triagely-signature` or `Authorization: Bearer <secret>`).
+
+## Public API (v1)
+
+A versioned, machine-to-machine REST API under `/api/v1`, authenticated with an
+API key (`x-api-key: tgk_…` or `Authorization: Bearer tgk_…`). Separate from the
+session-based UI endpoints, so external systems (helpdesk sync, Zapier, a
+backend) can drive tickets headlessly.
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `GET` | `/api/v1/tickets` | List tickets. Filters: `status`, `category`, `priority`, `q`; paged with `limit` (max 200) + `offset`. |
+| `POST` | `/api/v1/tickets` | Ingest + triage a raw inbound message. |
+| `GET` | `/api/v1/tickets/:id` | Fetch an enriched ticket. |
+| `PATCH` | `/api/v1/tickets/:id` | `resolve` · `reopen` · `reassign` · `priority` · `regenerate_draft`. |
+| `POST` | `/api/v1/tickets/:id/reply` | Send a reply (email delivery), appending to the thread. |
+| `GET` | `/api/v1/analytics` | Aggregated analytics. |
+
+**Keys.** Mint and revoke keys from the admin endpoints (they require a signed-in
+operator session): `GET`/`POST /api/admin/api-keys`, `DELETE /api/admin/api-keys/:id`.
+The full secret (`tgk_<prefix>_<secret>`) is returned **once** at creation; only a
+SHA-256 hash is stored, so it can never be recovered. Alternatively, set
+`API_BOOTSTRAP_KEY` to accept a fixed admin key from the environment.
+
+```bash
+# mint a key (with an operator session cookie), then use it
+curl -X POST localhost:3000/api/admin/api-keys -b cookies.txt \
+  -H 'content-type: application/json' -d '{"name":"Zapier","role":"agent"}'
+
+curl localhost:3000/api/v1/tickets -H 'x-api-key: tgk_…'
+```
 
 ## Persistence
 

@@ -47,6 +47,9 @@ const schema = z.object({
 
   /** Shared secret required on inbound email webhooks. */
   INBOUND_WEBHOOK_SECRET: z.string().optional(),
+
+  /** Optional bootstrap API key (admin) accepted by the public /api/v1 surface. */
+  API_BOOTSTRAP_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof schema>;

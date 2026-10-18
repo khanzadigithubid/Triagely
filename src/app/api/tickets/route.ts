@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { CATEGORIES, STATUSES } from "@/domain/ticket/schemas";
-import { listTickets } from "@/application/tickets/queries";
+import { filterTickets, listTickets } from "@/application/tickets/queries";
 import { ingestTicket } from "@/application/ingest/ingest-ticket";
 import { getSession } from "@/infrastructure/auth/session";
 import { log } from "@/infrastructure/observability/logger";
@@ -21,30 +20,12 @@ const Inbound = z.object({
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const params = request.nextUrl.searchParams;
-  const status = params.get("status");
-  const category = params.get("category");
-  const priority = params.get("priority");
-  const q = params.get("q")?.toLowerCase();
-
-  let tickets = await listTickets();
-
-  if (status && (STATUSES as readonly string[]).includes(status)) {
-    tickets = tickets.filter((t) => t.status === status);
-  }
-  if (category && (CATEGORIES as readonly string[]).includes(category)) {
-    tickets = tickets.filter((t) => t.classification.category === category);
-  }
-  if (priority) {
-    tickets = tickets.filter((t) => t.classification.priority === priority);
-  }
-  if (q) {
-    tickets = tickets.filter(
-      (t) =>
-        t.subject.toLowerCase().includes(q) ||
-        t.fromName.toLowerCase().includes(q) ||
-        t.fromEmail.toLowerCase().includes(q),
-    );
-  }
+  const tickets = filterTickets(await listTickets(), {
+    status: params.get("status"),
+    category: params.get("category"),
+    priority: params.get("priority"),
+    q: params.get("q"),
+  });
 
   return NextResponse.json({ count: tickets.length, tickets });
 }

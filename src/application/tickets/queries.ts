@@ -8,7 +8,7 @@ import type {
   Store,
   Ticket,
 } from "@/domain/ticket/schemas";
-import { CATEGORIES, PRIORITIES, SENTIMENTS } from "@/domain/ticket/schemas";
+import { CATEGORIES, PRIORITIES, SENTIMENTS, STATUSES } from "@/domain/ticket/schemas";
 import { evaluateSla } from "@/domain/sla/policy";
 import { getStore } from "@/infrastructure/storage/store";
 
@@ -62,6 +62,39 @@ export function listTicketViews(store: Store, nowMs: number): TicketView[] {
 export function findTicketView(store: Store, id: string, nowMs: number): TicketView | null {
   const ticket = store.tickets.find((t) => t.id === id);
   return ticket ? enrichTicket(ticket, store.agents, nowMs) : null;
+}
+
+export interface TicketFilters {
+  status?: string | null;
+  category?: string | null;
+  priority?: string | null;
+  q?: string | null;
+}
+
+/** Pure filter over ticket views, shared by the UI API and the public v1 API. */
+export function filterTickets(tickets: TicketView[], filters: TicketFilters): TicketView[] {
+  const { status, category, priority } = filters;
+  const q = filters.q?.toLowerCase();
+  let result = tickets;
+
+  if (status && (STATUSES as readonly string[]).includes(status)) {
+    result = result.filter((t) => t.status === status);
+  }
+  if (category && (CATEGORIES as readonly string[]).includes(category)) {
+    result = result.filter((t) => t.classification.category === category);
+  }
+  if (priority && (PRIORITIES as readonly string[]).includes(priority)) {
+    result = result.filter((t) => t.classification.priority === priority);
+  }
+  if (q) {
+    result = result.filter(
+      (t) =>
+        t.subject.toLowerCase().includes(q) ||
+        t.fromName.toLowerCase().includes(q) ||
+        t.fromEmail.toLowerCase().includes(q),
+    );
+  }
+  return result;
 }
 
 export function ticketAudit(store: Store, id: string): AuditEvent[] {

@@ -31,6 +31,7 @@ export async function GET(): Promise<NextResponse> {
       auth: env.AUTH_SECRET ? "configured" : "dev-secret",
       email: emailMode(),
       inboundWebhook: env.INBOUND_WEBHOOK_SECRET ? "secured" : "open",
+      publicApi: "api-key",
       checks,
       timestamp: new Date().toISOString(),
     },
